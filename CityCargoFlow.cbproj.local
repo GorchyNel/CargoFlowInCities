@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>1899.12.30 00:00:00.000.064,D:\Progects\CityRoutes\MainForm.h=D:\Progects\Unit1.h</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.487,D:\Progects\CityRoutes\Unit1.cpp=D:\Progects\CityRoutes\CargoFlow.cpp</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.064,D:\Progects\CityRoutes\MainForm.dfm=D:\Progects\Unit1.dfm</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.727,=D:\Progects\Unit2.cpp</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.487,D:\Progects\CityRoutes\Unit1.h=D:\Progects\CityRoutes\CargoFlow.h</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.471,=D:\Progects\CityRoutes\Unit1.cpp</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.064,D:\Progects\CityRoutes\MainForm.cpp=D:\Progects\Unit1.cpp</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.178,D:\Progects\CityRoutes\CityRoutes_PCH1.h=D:\Progects\Project1PCH1.h</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.989,=D:\Progects\Unit1.cpp</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.969,=D:\Progects\Project1PCH1.h</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.633,D:\Progects\CityRoutes\CityRoutes.cbproj=D:\Progects\Project1.cbproj</Transaction>
+    <Transaction>2018.12.10 23:42:37.371,D:\Progects\CityCargoFlow\CityCargoFlow.cbproj=D:\Progects\CityRoutes\CityRoutes.cbproj</Transaction>
+    <Transaction>2018.12.10 23:43:20.845,D:\Progects\CityRoutes\CityCargoFlow.cbproj=D:\Progects\CityCargoFlow\CityCargoFlow.cbproj</Transaction>
+  </Transactions>
+</BorlandProject>

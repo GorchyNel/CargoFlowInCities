@@ -1,0 +1,32 @@
+//---------------------------------------------------------------------------
+#pragma once
+
+#ifndef CargoFlowH
+#define CargoFlowH
+//---------------------------------------------------------------------------
+
+#include "CityRoutes_PCH1.h"
+
+typedef float MatrType;
+typedef DynamicArray<DynamicArray<MatrType> > tddMatr;
+typedef DynamicArray<UnicodeString> tdStrs;
+typedef unsigned int uint;
+
+
+enum fails {Good, MemoryFail, FileFail, EmptyName, EmptyTable};
+
+bool Save_Cities(tddMatr CargoFlow, tdStrs CityNames,  AnsiString FileName);
+
+fails Load_Cities(tddMatr& CargoFlow, tdStrs& CityNames, AnsiString FileName);
+
+float ExportCrg2City(tddMatr CargoFlow, uint RowIndex);
+
+float ImportCrg2City(tddMatr CargoFlow, uint ColIndex);
+
+float CalcP(tddMatr CargoFlow);
+
+float ImportCrgFlWeidht(tddMatr CargoFlow, uint ColIndex, float P = -1);
+
+float ExportCrgFlWeight(tddMatr CargoFlow, uint RowIndex, float P = -1);
+
+#endif

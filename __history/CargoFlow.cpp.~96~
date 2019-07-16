@@ -1,0 +1,188 @@
+﻿//---------------------------------------------------------------------------
+
+#pragma hdrstop
+
+#include "CargoFlow.h"
+//---------------------------------------------------------------------------
+#pragma package(smart_init)
+#include <fstream>
+bool Save_Cities(tddMatr CargoFlow, tdStrs CityNames,  AnsiString FileName)
+ {
+ if(FileName.Length() == 0) return false;
+ ofstream File;
+ int length;
+ File.open(FileName.c_str(), ios::binary /*| ios::trunc*/);//открытие файла на запись с очисткой
+ if(File.fail()) return false;
+
+ if(CargoFlow.Length == 0 && CityNames.Length == 0)// Сохранение пустой таблицы
+ {
+ File.close();
+ return true;
+ }
+
+ length = CityNames.Length;
+
+ File.write((char*)&length,
+	sizeof(length)); //записываем длину массива Названия Городов
+
+ if(length /* == CityNames.Length*/)
+ {
+ /*Циклически записываем массив Названия Городов в виде:
+	длина строки - строка(Назвыание Города)*/
+    for(int i=0; i<CityNames.Length; i++)
+	{
+	  length = CityNames[i].Length();
+	  File.write((char*)&length, sizeof(length));
+	  if(length /*== CityNames[i].Length()*/)
+		  File.write((char*) &CityNames[i], sizeof(wchar_t)* length);
+	}
+ }
+
+ if(CargoFlow.Length)
+ {
+	/*Циклически записываем матрицу(построчно) грузопотоков
+	между Городами(без расчетов) */
+	for(int i=0; i<CargoFlow.Length; i++)
+	  File.write((char*)&CargoFlow[i][0], sizeof(MatrType) * CargoFlow[i].Length);
+ }
+
+  File.close();
+  return true;
+ }
+
+
+fails Load_Cities(tddMatr& CargoFlow, tdStrs& CityNames, AnsiString FileName)
+{
+ ifstream File;
+ if(!FileName.Length()) return EmptyName;
+
+ File.open(FileName.c_str(), ios::binary); //открытие файла на чтение
+ if(File.fail()) return FileFail;
+
+ File.seekg(0, ios::end);
+ File.clear();
+
+ int size = File.tellg();
+ if(!size) return EmptyTable;
+ File.seekg(0);
+
+ int length; //переменная для хранения длинн
+ File.read((char*)&length, sizeof(length));//считывание длинны массива строк
+
+ if(length/*длиннa массива строк*/)
+	{
+	   try
+	   {
+		CityNames.set_length(length);
+       }
+	   catch(...)
+	   {
+		File.close();
+		return MemoryFail;
+	   }
+	   for(int i=0; i<CityNames.Length; i++)
+	   {
+		 File.read((char*)&length, sizeof(length));//считывание длины строки
+
+		 if(length)
+		   {
+			 //выделение памяти под строку Название Города
+			try
+			{
+			CityNames[i].SetLength(length); /*установка длины строки Название Города*/
+			}
+			catch(...)
+			{
+			CityNames.set_length(0); //удаление массива строк Названия Городов
+			File.close(); //закрытие файла
+			return MemoryFail;
+			}
+			//считывание в созданную строку строкИ из файла
+			File.read((char*)&CityNames[i], sizeof(wchar_t) * length);
+		   }
+	   }
+	}
+
+   //*******************************************************************
+   File.clear();//на случай, если после массива строк в файле ничего не записано
+   size = File.tellg(); //позиция после считывания массива строк
+   File.seekg(0, ios::end);
+   File.clear();
+
+   if(size != File.tellg())//Если после массива строк ничего нет, то это условие
+   //не выполнится
+   {
+	 size = sqrt((float)(-1 * (size - File.tellg())/sizeof(MatrType)));//вычисление Размера матрицы
+	 //выделение памяти под матрицу
+	 try{
+		CargoFlow.set_length(size);
+		for(int i = 0; i < size; i++)
+		CargoFlow[i].set_length(size);
+	 }
+	 catch(...)
+	 {
+	   CargoFlow.set_length(0);/*если матрица Грузопоток
+	   была заполнена, очищаем ее*/
+	   CityNames.set_length(0);//удаление массива строк Названия Городов
+	   File.close(); //закрытие файла
+	   return MemoryFail;
+	 }
+	 //Циклично считываем в созданную матрицу данные из файла
+	 for(int i=0; i<CityNames.Length; i++)
+		 File.read((char*)&CargoFlow[i][0], sizeof(MatrType) * CargoFlow[i].Length);
+   }
+   File.close();//закрываем файл
+   return Good; //говорим, что все хорошо
+ }
+
+float ExportCrg2City(tddMatr CargoFlow, uint RowIndex)
+{
+ if(CargoFlow.Length==0) return -1;
+ float sum = 0;
+ for (int i = 0; i < CargoFlow[0].Length; i++)
+	   sum += CargoFlow[i][RowIndex];
+ return sum;
+}
+
+float ImportCrg2City(tddMatr CargoFlow, uint ColIndex)
+{
+ if(CargoFlow.Length==0) return -1;
+ float sum = 0;
+ for (int i = 0; i < CargoFlow.Length; i++)
+	   sum += CargoFlow[ColIndex][i];
+ return sum;
+}
+
+float CalcP(tddMatr CargoFlow)
+{
+  if(CargoFlow.Length==0) return -1;
+  float P;
+  for (int i = 0; i < CargoFlow.Length; i++)
+	 for (int j = 0; j < CargoFlow[0].Length; j++)
+		  P += CargoFlow[i][j];
+  return  P;
+}
+
+float ImportCrgFlWeidht(tddMatr CargoFlow, uint ColIndex, float P)
+//ввозимые грузы для города считаем по столбцу
+{
+  if(CargoFlow.Length==0) return -1;
+  float CalcRes = 0;
+  if(P == -1) P = CalcP(CargoFlow);
+  for (int i = 0; i < CargoFlow.Length; i++)
+	  if(i != /*на самом деле RowIndex, который ==*/ColIndex)
+	       CalcRes += CargoFlow[ColIndex][i];
+
+  return  1 / P * CalcRes;
+}
+
+float ExportCrgFlWeight(tddMatr CargoFlow, uint RowIndex, float P)
+{
+  if(CargoFlow.Length==0) return -1;
+  float CalcRes = 0;
+  if(P == -1) P = CalcP(CargoFlow);
+  for (int i = 0; i < CargoFlow[0].Length; i++)
+	  if(i != /*на самом деле ColIndex, который ==*/RowIndex)
+		   CalcRes += CargoFlow[i][RowIndex];
+  return (float)1 / P * CalcRes;
+}

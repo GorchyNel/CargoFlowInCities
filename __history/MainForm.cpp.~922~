@@ -1,0 +1,1216 @@
+﻿//---------------------------------------------------------------------------
+
+#include <vcl.h>
+#pragma hdrstop
+
+#include "MainForm.h"
+//---------------------------------------------------------------------------
+#pragma package(smart_init)
+#pragma resource "*.dfm"
+TMF_CityRoutes *MF_CityRoutes;
+//---------------------------------------------------------------------------
+
+//---------------------------------------------------------------------------
+__fastcall TMF_CityRoutes::TMF_CityRoutes(TComponent* Owner)
+	: TForm(Owner)
+{
+}
+
+
+/*******************************Мои функции***************************************/
+
+class TNelStringGrid: /*по умолчанию public*/ TStringGrid{
+	public:
+		  using TStringGrid::DeleteRow;
+		  using TStringGrid::DeleteColumn;
+		  using TStringGrid::InvalidateCell;
+};
+//------------------------------------------------------------------
+const int MIN_COL_WIDTH = 12;
+
+const int COLS_WITH_CALC = 5;
+
+void ColMove(TStringGrid* table, int FromIdx, int ToIdx)
+{
+ if(FromIdx == ToIdx || FromIdx < 0 || ToIdx < 0 ||
+		   FromIdx >= table->ColCount || ToIdx >= table->ColCount) return;
+
+ TStrings *tmpCol = new TStringList();
+
+ try
+ {
+  if(FromIdx > ToIdx)
+	for(int i = FromIdx; i > ToIdx;  i--) {
+	   tmpCol->Assign(table->Cols[i]);
+	   table->Cols[i]->Assign(table->Cols[i-1]);
+	   table->Cols[i-1]->Assign(tmpCol);
+	}
+  else
+	for(int i = FromIdx; i < ToIdx;  i++) {
+	   tmpCol->Assign(table->Cols[i]);
+	   table->Cols[i]->Assign(table->Cols[i+1]);
+	   table->Cols[i+1]->Assign(tmpCol);
+	}
+ }
+ __finally
+ {
+   delete tmpCol;
+ }
+}
+
+void RowMove(TStringGrid* table, int FromIdx, int ToIdx)
+{
+ if(FromIdx == ToIdx || FromIdx < 0 || ToIdx < 0 ||
+		   FromIdx >= table->ColCount || ToIdx >= table->ColCount) return;
+
+ TStrings *tmpRow = new TStringList();
+
+ try
+ {
+  if(FromIdx > ToIdx)
+	for(int i = FromIdx; i > ToIdx;  i--) {
+	   tmpRow->Assign(table->Rows[i]);
+	   table->Rows[i]->Assign(table->Rows[i-1]);
+	   table->Rows[i-1]->Assign(tmpRow);
+	}
+  else
+	for(int i = FromIdx; i < ToIdx;  i++) {
+	   tmpRow->Assign(table->Rows[i]);
+	   table->Rows[i]->Assign(table->Rows[i+1]);
+	   table->Rows[i+1]->Assign(tmpRow);
+	}
+ }
+ __finally
+ {
+   delete tmpRow;
+ }
+}
+
+int helpSortText(const UnicodeString &s1, const UnicodeString &s2)
+{
+  //return  AnsiCompareStr(s1, s2);
+}
+
+float helpSortNum(const UnicodeString &s1, const UnicodeString &s2)
+{
+  float n1, n2;
+  if(!TryStrToFloat(s1, n1) || !TryStrToFloat(s2, n2)) return 0;
+
+  /*Application->MessageBox(UnicodeString(FloatToStr(n1) + L" "
+   + FloatToStr(n2) + L"\nn1 - n2 = "
+   + FloatToStr(n1-n2) + L".").w_str(), UnicodeString(L"Внимание!").w_str(),
+		  MB_OKCANCEL|MB_ICONQUESTION); */
+
+  return  n1-n2;
+}
+
+
+void SortGridByCol(TStringGrid *table, int colIdx, bool Ascending,
+											   bool IsNumSorted = true)
+{
+ TStrings *col = table->Cols[colIdx];
+ TStrings *tmpRow = new TStringList();
+ TStrings *&tmpCol =  tmpRow;
+
+ try{
+ for(int i = table->FixedRows; i < table->RowCount; i++)
+   {
+	 if (i == colIdx) i++;
+	 for (int j = i + 1;  j < table->RowCount; j++)
+	 {
+	  if(j == colIdx)
+	  {
+	  if(j != table->RowCount - 1) j++;
+	  else return;
+	  }
+	  float RetValue;
+	  if(IsNumSorted) RetValue = helpSortNum(col->Strings[i], col->Strings[j]);
+	  else RetValue = helpSortText(col->Strings[i], col->Strings[j]);
+
+	  if(RetValue > 0 && Ascending || RetValue < 0 && !Ascending)
+	   {
+		tmpRow = table->Rows[i];
+		table->Rows[i] = table->Rows[j];
+		table->Rows[j] = tmpRow;
+
+		tmpCol = table->Cols[i]; // tmpCol -Ссылка на tmpRow, исп. для улуч читаемости
+		table->Cols[i]->Assign(table->Cols[j]);
+		table->Cols[j]->Assign(tmpCol);
+	   }
+	 }
+   }
+ } __finally {
+ delete  tmpRow;
+ }
+}
+
+void SortGridByRow(TStringGrid *table, int rowIdx, bool Ascending)
+{
+ TStrings *row = table->Cols[rowIdx];
+ TStrings *tmpCol = new TStringList();
+ TStrings *&tmpRow = tmpCol;
+
+ try{
+ for (int i = table->FixedCols; i < table->ColCount - COLS_WITH_CALC; i++)
+   {
+	 if (i == rowIdx) continue;
+	 for (int j=i+1;  j < table->ColCount - COLS_WITH_CALC; j++)
+	 {
+	 if(j == rowIdx)
+	 {
+	 if(j != table->RowCount - 1 ) j++;
+	 else return;
+	 }
+
+	  if(helpSortNum(row->Strings[i], row->Strings[j])>0 && Ascending ||
+		 helpSortNum(row->Strings[i], row->Strings[j])<0 && !Ascending)
+	   {
+		tmpCol->Assign(table->Cols[i]);
+		table->Cols[i]->Assign(table->Cols[j]);
+		table->Cols[j]->Assign(tmpCol);
+
+		tmpRow/*Ссылка на tmpCol, исп. для улучш читаемости*/->Assign(table->Rows[i]);
+		table->Rows[i]->Assign(table->Rows[j]);
+		table->Rows[j]->Assign(tmpRow);
+	   }
+	 }
+   }
+ } __finally {
+ delete  tmpCol;
+ }
+}
+
+
+
+int CalcGridColWidth(TStringGrid *table, int colIdx)
+{
+  if(!table) return 0;
+  table->Canvas->Font->Assign(table->Font);
+  int maxWidth=0;
+  for (int i = 0; i < table->RowCount; i++) {
+	 int textWidth = table->Canvas->TextWidth(table->Cells[colIdx][i]);
+	 if (textWidth > maxWidth) maxWidth=textWidth;
+  }
+  return maxWidth + MIN_COL_WIDTH;
+}
+
+bool __fastcall TMF_CityRoutes::RecreateArrays(bool ThisIsSave)
+{
+ //Предварительная очистка массивов
+ NameCity.set_length(0);
+ CargoF.set_length(0);
+
+ if(T_CFCalc->RowHeights[1] == 0) return false;
+
+   try{
+   NameCity.set_length(T_CFCalc->ColCount - 1 - COLS_WITH_CALC);
+   for(int i = 1; i < T_CFCalc->ColCount - COLS_WITH_CALC; i++)
+			NameCity[i-1] = T_CFCalc->Cells[i][0];
+   }
+   catch(...)
+   {
+	 NameCity.set_length(0);
+	 return false;
+   }
+
+   int FailsCount = 0;
+   try
+   {
+   CargoF.set_length(T_CFCalc->RowCount-1);
+
+	 for(int i = 1; i < T_CFCalc->RowCount; i++)
+	  {
+		  CargoF[i-1].set_length(T_CFCalc->RowCount-1);
+		  for(int j = 1; j < T_CFCalc->RowCount; j++)
+		  {
+			if(i == j)
+			{
+			CargoF[i-1][j-1] = 0;
+            continue;
+			}
+			if(!TryStrToFloat(T_CFCalc->Cells[j][i], CargoF[i-1][j-1])
+								   || CargoF[i-1][j-1] < 0) FailsCount++;
+		  }
+	  }
+   }
+   catch(...)
+   {
+   CargoF.set_length(0);
+   NameCity.set_length(0);
+   return false;
+   }
+
+   int UserChouse = 0;
+   UnicodeString Message;
+
+   if(FailsCount)
+   {
+   if(ThisIsSave)
+	 Message =  L"будут стёрты";
+   else /*Для вызову при Расчетах*/
+	 Message = L"и пустые ячейки будут заменены на нули";
+
+   UserChouse = Application->MessageBox(
+		 UnicodeString(L"В таблице находятся недопустимые значения (количество: "
+		 + IntToStr(FailsCount) + + L")!\n" +
+		 UnicodeString(L"Всё равно продолжить?")
+		 + L"\nВ таком случае ячейки c ошибками "
+		 + Message + L'.').w_str(), UnicodeString(L"Внимание!").w_str(),
+		  MB_OKCANCEL|MB_ICONQUESTION);
+   }
+
+   switch(UserChouse){
+   case IDOK:
+   for(int i = 1; i < T_CFCalc->RowCount; i++)
+		  for(int j = 1; j < T_CFCalc->RowCount; j++)
+		  {
+			if(i != j)
+			  if(!TryStrToFloat(T_CFCalc->Cells[j][i], CargoF[i-1][j-1])
+				 ||  CargoF[i-1][j-1] < 0)
+			  {
+			   if(ThisIsSave)
+				  CargoF[i-1][j-1] = -1; //признак того,
+				//что при открытии таких исходных данных ячейку надо оставлять пустой
+			   else /*ДЛЯ РАСЧЕТОВ*/
+				  CargoF[i-1][j-1] =  0;
+			  }
+		  }
+   break;
+
+   case IDCANCEL:
+	  CargoF.set_length(0);
+	  NameCity.set_length(0);
+	  return false;
+   }
+   return true;
+}
+
+bool __fastcall TMF_CityRoutes::SaveData(bool showDlg)
+{
+ if(showDlg)
+  if(!SaveDialog->Execute())
+	 return false;
+
+   //убираем стрелку
+   ////++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++/////////////
+   if(FSortedColNbr != 0)
+	T_CFCalc->Cells[abs(FSortedColNbr) - 1][0] = //убираем пометку из stroki сортировки
+		 T_CFCalc->Cells[abs(FSortedColNbr) - 1][0].SubString(1,
+			T_CFCalc->Cells[abs(FSortedColNbr) - 1][0].Length() - 2); // 2 = пробел+символ
+
+	if(FSortedRowNbr != 0)
+	 T_CFCalc->Cells[0][abs(FSortedRowNbr) - 1] = //убираем пометку из столбца сортировки
+		 T_CFCalc->Cells[0][abs(FSortedRowNbr) - 1].SubString(1,
+			T_CFCalc->Cells[0][abs(FSortedRowNbr) - 1].Length() - 2); // 2 = пробел+символ
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++////
+
+   RecreateArrays();//заполняем массивы
+
+   //возврат стрелочки
+   ////++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++/////////////
+   if(FSortedColNbr > 0)
+   {
+   int i = abs(FSortedColNbr) - 1;
+   T_CFCalc->Cells[i][0]
+						= T_CFCalc->Cells[i][0] + L" ↓";
+   T_CFCalc->ColWidths[i] = CalcGridColWidth(T_CFCalc, i);
+   }
+
+   if(FSortedColNbr < 0)
+   {
+   int i = abs(FSortedColNbr) - 1;
+   T_CFCalc->Cells[i][0]
+			= T_CFCalc->Cells[i][0] + L" ↑";
+   T_CFCalc->ColWidths[i] = CalcGridColWidth(T_CFCalc, i);
+   }
+
+   if(FSortedRowNbr > 0)
+   {
+   int i = abs(FSortedRowNbr) - 1;
+   T_CFCalc->Cells[0][i]
+					= T_CFCalc->Cells[0][i] + L" →";
+   T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+   }
+
+   if(FSortedRowNbr < 0)
+   {
+   int i = abs(FSortedRowNbr) - 1;
+   T_CFCalc->Cells[0][i]
+				= T_CFCalc->Cells[0][i] + L" ←";
+   T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+   }
+   ////++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++/////////////
+
+   if(!Save_Cities(CargoF, NameCity, SaveDialog->FileName))
+   {
+	  Application->MessageBox(L"У вас нет доступа к данному файлу!",
+					  L"Ошибка!", MB_OK/*нужна иконка*/);
+	  return false;
+   }
+
+   MF_CityRoutes->Caption = SaveDialog->FileName;
+
+   SaveButton->Enabled = false;
+   MF_Save->Enabled = false;
+
+   //Oчистка массивов
+   NameCity.set_length(0);
+   CargoF.set_length(0);
+
+   return true;
+}
+
+void __fastcall TMF_CityRoutes::CreateEmptyT()
+{
+ T_CFCalc->Cells[0][0] = L"Города";
+ T_CFCalc->ColCount = 6;
+ T_CFCalc->RowCount = 2;
+ T_CFCalc->RowHeights[1] = 0;
+ T_CFCalc->Cells[1][0] = L"Ввозимые грузы";
+ T_CFCalc->Cells[2][0] = L"Вывозимые грузы";
+ T_CFCalc->Cells[3][0] = L"Грузы, проходящие транзитом";
+ T_CFCalc->Cells[4][0] = L"Вес грузопотока(ввозимые)";
+ T_CFCalc->Cells[5][0] = L"Вес грузопотока(вывозимые)";
+
+ for(int J = 0; J < T_CFCalc->ColCount; J++)
+	  T_CFCalc->ColWidths[J] = CalcGridColWidth(T_CFCalc, J);//Автокоррекция ширины столбцов
+ T_CFCalc->Options = T_CFCalc->Options>>goEditing;// выключение редактирования ячеек*
+}
+
+/*******************************************************************************/
+
+
+void __fastcall TMF_CityRoutes::FormCreate(TObject *Sender)
+{
+ FSortedColNbr = 0;
+ FSortedRowNbr = 0;
+ IsDelete = false;
+ IsSort = false;
+ MF_CityRoutes->Caption = L"Безымянный";
+ CreateEmptyT();
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::MFO_EditModeClick(TObject *Sender)
+{
+  if(MFO_EditMode->Checked)
+  {
+  T_CFCalc->Options = T_CFCalc->Options<<goEditing;//вкл
+  T_CFCalc->Options = T_CFCalc->Options>>goRangeSelect;//выкл
+  }
+  else
+  {
+  T_CFCalc->Options = T_CFCalc->Options>>goEditing;//выкл
+  T_CFCalc->Options = T_CFCalc->Options<<goRangeSelect;//вкл
+  }
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::ME_InsertCityClick(TObject *Sender)
+{
+  int Aim = 1;
+  if(T_CFCalc->RowHeights[1]==0){
+	  T_CFCalc->RowHeights[1]=T_CFCalc->DefaultRowHeight;
+	  T_CFCalc->ColCount++;
+	  for(int i = T_CFCalc->ColCount-1; i >= T_CFCalc->ColCount - COLS_WITH_CALC; i--)
+	  {
+			T_CFCalc->Cols[i] = T_CFCalc->Cols[i-1];
+            T_CFCalc->ColWidths[i] = T_CFCalc->ColWidths[i-1];
+	  }
+	  T_CFCalc->Cols[T_CFCalc->ColCount - COLS_WITH_CALC - 1]->Clear();
+  }
+  else{
+	  T_CFCalc->RowCount++;
+	  T_CFCalc->ColCount++;
+
+	  if(T_CFCalc->Row > T_CFCalc->Col
+	  || T_CFCalc->Col > T_CFCalc->ColCount - COLS_WITH_CALC - 1)
+		   Aim = T_CFCalc->Row;
+	  else Aim = T_CFCalc->Col;
+
+	  for(int i = T_CFCalc->ColCount-1; i > Aim; i--)
+	  {
+		 T_CFCalc->Cols[i] = T_CFCalc->Cols[i-1];
+		 T_CFCalc->Rows[i] = T_CFCalc->Rows[i-1];
+		 T_CFCalc->ColWidths[i] = T_CFCalc->ColWidths[i-1];
+	  }
+  }
+  T_CFCalc->Cols[Aim]->Clear();
+  T_CFCalc->Rows[Aim]->Clear();
+  T_CFCalc->ColWidths[T_CFCalc->ColCount - COLS_WITH_CALC - 1] =
+	 T_CFCalc->ColWidths[0];
+
+ T_CFCalc->Col = 1;
+
+  T_CFCalc->Options = T_CFCalc->Options<<goEditing;//вкл
+  MFO_EditMode->Checked = true;
+
+  SaveButton->Enabled = true;
+  MF_Save->Enabled = true;
+
+  ME_DelCity->Enabled = true;
+  DelCityButton->Enabled = true;
+
+  if(T_CFCalc->RowCount < 3) CalcButton->Enabled = false;
+  else CalcButton->Enabled = true;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::ME_AddCityClick(TObject *Sender)
+{
+  if(T_CFCalc->RowHeights[1]==0)
+	  T_CFCalc->RowHeights[1]=T_CFCalc->DefaultRowHeight;
+  else T_CFCalc->RowCount++;
+
+  T_CFCalc->ColCount++;
+  for(int i = T_CFCalc->ColCount-1; i >= T_CFCalc->ColCount - COLS_WITH_CALC; i--)
+  {
+	 T_CFCalc->Cols[i] = T_CFCalc->Cols[i-1];
+	 T_CFCalc->ColWidths[i] = T_CFCalc->ColWidths[i-1];
+  }
+
+  T_CFCalc->Cols[T_CFCalc->ColCount - COLS_WITH_CALC - 1]->Clear();
+
+   T_CFCalc->ColWidths[T_CFCalc->ColCount - COLS_WITH_CALC - 1] =
+	T_CFCalc->ColWidths[0];
+
+  T_CFCalc->Row = T_CFCalc->RowCount-1;
+  T_CFCalc->Col = 1;
+
+  T_CFCalc->Options = T_CFCalc->Options<<goEditing;//вкл
+  MFO_EditMode->Checked = true;
+
+  SaveButton->Enabled = true;
+  MF_Save->Enabled = true;
+
+  ME_DelCity->Enabled = true;
+  DelCityButton->Enabled = true;
+
+  if(T_CFCalc->RowCount < 3) CalcButton->Enabled = false;
+  else CalcButton->Enabled = true;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::MF_SaveClick(TObject *Sender)
+{
+ SaveData(SaveDialog->FileName.IsEmpty()); //////////////////
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::MF_ExitClick(TObject *Sender)
+{
+  Close();
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::ME_DelCityClick(TObject *Sender)
+{
+  if(T_CFCalc->Row == 0 && T_CFCalc->Col == 0 || T_CFCalc->RowHeights[1] == 0) return;
+
+  IsDelete = true;
+
+  //при щелчке на Столбце сортировки предлагать удалить только город по строке///////////////////
+  if( T_CFCalc->RowCount == 2)
+ {
+   if(Application->MessageBox(
+	UnicodeString(L"Удалить информацию о городе \"" +
+	T_CFCalc->Cells[0][T_CFCalc->Row] + L"\"" + L"?").w_str(),
+   UnicodeString(L"Удалить \"Город\"?").w_str(), MB_OKCANCEL|MB_ICONQUESTION)
+   == IDCANCEL)
+   {
+   IsDelete = false;
+   return;
+   }
+  //Удаление
+   T_CFCalc->RowHeights[1]=0;//НЕ удаляем последнюю нефиксированную строку
+  //Удаление столбца
+  ((TNelStringGrid*)T_CFCalc)->DeleteColumn(1);
+   T_CFCalc->Cols[T_CFCalc->ColCount]->Clear();
+
+   MFO_EditMode->Checked = false;
+
+   ME_DelCity->Enabled = false;
+   DelCityButton->Enabled = false;
+   return;
+ }
+
+  int UserChouse;
+
+  if(T_CFCalc->Row == T_CFCalc->Col ||
+	   T_CFCalc->Col >= T_CFCalc->ColCount - COLS_WITH_CALC)
+		 UserChouse = Application->MessageBox(
+		  UnicodeString(L"Удалить информацию о городе \"" +
+		   T_CFCalc->Cells[0][T_CFCalc->Row] + L"\"" + L"?\n"
+			+ L"Чтобы отменить удаление нажмите на кнопку \"Отмена\"."
+			 ).w_str(), UnicodeString(L"Удалить \"Город\"?"
+			  ).w_str(), MB_OKCANCEL|MB_ICONQUESTION);
+   else
+	UserChouse = Application->MessageBox(UnicodeString(
+	 L"При нажатии на кнопку \"ДА\" будет удалена информация о городе \"" +
+	  T_CFCalc->Cells[0][T_CFCalc->Row] + L"\"" + L"\n"
+	   + L"При нажатии на кнопку \"Нет\" будет удалена информация о городе "
+		+ L"\"" + T_CFCalc->Cells[T_CFCalc->Col][0] + L"\"\n" +
+		 L"Чтобы отменить удаление нажмите на кнопку \"Отмена\"."
+		  ).w_str(), UnicodeString(L"Удалить \"Город\"?").w_str(),
+		   MB_YESNOCANCEL|MB_ICONQUESTION);
+
+   switch(UserChouse)
+   {
+   case IDOK:
+   case IDYES:
+   UserChouse = T_CFCalc->Row;
+   break;
+
+   case IDNO:
+   UserChouse = T_CFCalc->Col;
+   break;
+
+   case IDCANCEL:
+   IsDelete = false;
+   return;
+   }
+
+   ((TNelStringGrid*)T_CFCalc)->DeleteRow(UserChouse);
+   T_CFCalc->Rows[T_CFCalc->RowCount]->Clear();
+   ((TNelStringGrid*)T_CFCalc)->DeleteColumn(UserChouse);
+   T_CFCalc->Cols[T_CFCalc->ColCount]->Clear();
+
+   IsDelete = false;
+
+   if(T_CFCalc->RowCount > 2) T_CFCalc->Row--;
+   T_CFCalc->Col = 1;
+   T_CFCalc->Invalidate();
+
+   if(T_CFCalc->RowCount < 3) CalcButton->Enabled = false;
+   else CalcButton->Enabled = true;
+   SaveButton->Enabled = true;
+   MF_Save->Enabled = true;
+}
+//---------------------------------------------------------------------------
+
+
+void __fastcall TMF_CityRoutes::MFO_SelectRangeClick(TObject *Sender)
+{
+  if(MFO_SelectRange->Checked)
+  {
+  T_CFCalc->Options = T_CFCalc->Options<<goRangeSelect;//вкл
+  T_CFCalc->Options = T_CFCalc->Options>>goEditing;//выкл
+  }
+  else
+  {
+  T_CFCalc->Options = T_CFCalc->Options>>goRangeSelect;//выкл
+  T_CFCalc->Options = T_CFCalc->Options<<goEditing;//вкл
+  }
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::MF_SaveAsClick(TObject *Sender)
+{
+ SaveData(true);
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcDrawCell(TObject *Sender, int ACol, int ARow,
+		  TRect &Rect, TGridDrawState State)
+{
+  TRect r = Rect;
+  r.Left-=4;
+  if( ACol == ARow && ACol != 0 && ARow != 0)
+  {
+  T_CFCalc->Canvas->Brush->Color=clHighlight;
+  T_CFCalc->Canvas->FillRect(r);//Заполняет указанный прямоугольник на холсте с помощью текущей кисти.
+  T_CFCalc->Canvas->Brush->Color=clSkyBlue;
+  }
+
+  if(ACol >= T_CFCalc->ColCount - COLS_WITH_CALC && ARow != 0)
+  {
+	 UnicodeString TextCell=T_CFCalc->Cells[ACol][ARow];
+	 T_CFCalc->Canvas->Font->Assign(T_CFCalc->Font);//Устанавливаем шрифт для написания текста
+	 //if(ACol == 0 || ARow == 0) T_CFCalc->Canvas->Brush->Color=T_CFCalc->FixedColor;
+	/* else*/  T_CFCalc->Canvas->Brush->Color=clYellow;
+	 T_CFCalc->Canvas->FillRect(r);//Заполняет указанный прямоугольник на холсте с помощью текущей кисти.
+	 T_CFCalc->Canvas->TextOut(r.Left + (T_CFCalc->ColWidths[ACol]
+							- T_CFCalc->Canvas->TextWidth(TextCell))/2,
+													   r.Top + 2, TextCell);
+	 /*T_CFCalc->Canvas->TextRect
+			   (r, r.Left + (T_CFCalc->ColWidths[ACol]
+						- T_CFCalc->Canvas->TextWidth(TextCell))/2,
+										 r.Top + 2, TextCell);   */
+   T_CFCalc->Canvas->Brush->Color=clSkyBlue;
+  }
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::MF_OpenClick(TObject *Sender)
+{
+if(OpenDialog->Execute())
+{
+SB_Inform->SimpleText = L"";
+ if(SaveButton->Enabled)
+ {
+	int Choice;
+	if(SaveDialog->FileName == OpenDialog->FileName)
+		Choice = Application->MessageBox(UnicodeString(L"Файл, который вы пытаетесь"
+		 + UnicodeString(L" открыть, в данный момент используется вами.\n")
+		 + L"Перезаписать файл? (В противном случае нынешные данные будут утеряны)"
+		 ).w_str(),
+			UnicodeString(L"Важно!").w_str(), MB_YESNO|MB_ICONQUESTION);
+	else
+	  Choice = Application->MessageBox(UnicodeString(L"В вашей таблице остались несохраненные"
+	   + UnicodeString(L" изменения\n")
+	   + L"Сохранить и продолжить?").w_str(),
+		UnicodeString(MF_CityRoutes->Caption).w_str(), MB_YESNOCANCEL|MB_ICONQUESTION);
+
+	 switch(Choice)
+	 {
+	 case IDNO:
+	 break;
+
+	 case IDYES:
+	 SaveData(SaveDialog->FileName.IsEmpty());//сохраняем несохраненные
+	 // изменения в старом файле
+	 if(SaveDialog->FileName == OpenDialog->FileName) return;//Для случая, когда
+	 //Пытались открыть используемый файл и перезаписали его
+	 break;
+
+	 case IDCANCEL:
+	 return;
+	 }
+ }
+
+ SaveDialog->FileName = OpenDialog->FileName;
+
+	switch(Load_Cities(CargoF, NameCity, (AnsiString)SaveDialog->FileName)){
+		  case MemoryFail:
+		  SB_Inform->SimpleText = L"Не хватает памяти!";
+		  return;
+
+		  case FileFail:
+		  SB_Inform->SimpleText = L"Нет доступа к файлу!";
+		  return;
+
+		  case EmptyTable:
+		  if(T_CFCalc->RowHeights[1] != 0) CreateEmptyT();
+		  return;
+	}
+
+MF_CityRoutes->Caption = SaveDialog->FileName;
+//задание параметров и заполнение таблицы
+for(int i = 0; i < T_CFCalc->RowCount; i++)
+	  T_CFCalc->Rows[i]->Clear();
+
+T_CFCalc->RowHeights[1] =
+	T_CFCalc->DefaultRowHeight;//если таблица до загрузки была пустой
+T_CFCalc->RowCount = CargoF.Length + 1;
+T_CFCalc->ColCount = CargoF.Length + COLS_WITH_CALC + 1;
+T_CFCalc->Options = T_CFCalc->Options<<goEditing;//разрешаем редактирование
+MFO_EditMode->Checked = true;
+
+T_CFCalc->Cells[0][0] = L"Города";
+T_CFCalc->Cells[T_CFCalc->ColCount - COLS_WITH_CALC][0] = L"Ввозимые грузы";
+T_CFCalc->Cells[T_CFCalc->ColCount - COLS_WITH_CALC + 1][0] = L"Вывозимые грузы";
+T_CFCalc->Cells[T_CFCalc->ColCount - COLS_WITH_CALC + 2][0] = L"Грузы, проходящие транзитом";
+T_CFCalc->Cells[T_CFCalc->ColCount - COLS_WITH_CALC + 3][0] = L"Вес грузопотока(ввозимые)";
+T_CFCalc->Cells[T_CFCalc->ColCount - COLS_WITH_CALC + 4][0] = L"Вес грузопотока(вывозимые)";
+
+for(int i = 0; i < T_CFCalc->RowCount-1; i++) //для перехода по строкам
+{
+  if(NameCity.Length > 0 && i > 0)
+  {
+  T_CFCalc->Cells[0][i] = NameCity[i - 1];
+  T_CFCalc->Cells[i][0] = NameCity[i - 1];
+  }
+
+  for(int j = 0; j < T_CFCalc->RowCount-1; j++) //для перехода по столбцам
+	 if(i!=j && CargoF[i][j] >= 0)
+		  T_CFCalc->Cells[j+1][i+1] = FloatToStr(CargoF[i][j]);
+}
+
+ for(int J = 0; J < T_CFCalc->ColCount; J++) //корректировка ширин столбцов
+	  T_CFCalc->ColWidths[J] = CalcGridColWidth(T_CFCalc, J);
+
+ //Oчистка массивов
+ NameCity.set_length(0);
+ CargoF.set_length(0);
+
+ //делаем кнопки доступными и недоступными
+ ME_DelCity->Enabled = true;
+ DelCityButton->Enabled = true;
+ SaveButton->Enabled = false;
+ MF_Save->Enabled = false;
+ if(T_CFCalc->RowCount < 3) CalcButton->Enabled = false;
+ else CalcButton->Enabled = true;
+}
+}
+//---------------------------------------------------------------------------
+void __fastcall TMF_CityRoutes::MFO_GoTabClick(TObject *Sender)
+{
+if(MFO_GoTab->Checked) T_CFCalc->Options = T_CFCalc->Options<<goTabs;
+else T_CFCalc->Options = T_CFCalc->Options>>goTabs;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcKeyPress(TObject *Sender, System::WideChar &Key)
+
+{
+if(Key == VK_ESCAPE && T_CFCalc->EditorMode)
+{
+  T_CFCalc->Cells[T_CFCalc->Col][T_CFCalc->Row] = SavedCell;
+  /*if(!T_CFCalc->Options.Contains(goAlwaysShowEditor))
+	  MFO_EditMode->Checked = false; */
+
+  return;
+}
+
+if(T_CFCalc->Col >= T_CFCalc->ColCount - COLS_WITH_CALC
+|| T_CFCalc->Col == T_CFCalc->Row)
+{
+ Key = 0;
+ return;//Запрещаем ввод чего бы то ни было в столбцы для вычислений
+}
+
+if(T_CFCalc->Row > 0 && T_CFCalc->Col > 0)
+ {
+  if(T_CFCalc->EditorMode/*Если таблица в реж. редакт.*/ && (!(Key >= '0'
+	&& Key <='9'
+	|| Key == FormatSettings.DecimalSeparator || Key == '+' /*|| Key == '-'*/
+	|| Key == 'e'
+	|| Key == 'E') && Key != VK_BACK/*==8*/ && Key != 3/*Ctrl+C*/
+	&& Key != 22/*Ctrl+V*/
+	&& Key != 24/*Ctrl+X*/ && Key != 26/*Ctrl+Z*/))
+	{
+	  if(Key != 32/*Space*/ && Key != 13/*Enter*/)
+		  SB_Inform->SimpleText = L"Недопустимый cимвол '" + UnicodeString(Key) + L'\'';
+	  Key = 0;
+	}
+	else SB_Inform->SimpleText=L"";
+ }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMF_CityRoutes::T_CFCalcSetEditText(TObject *Sender, int ACol, int ARow,
+          const UnicodeString Value)
+{
+  if(ACol == 0 && ARow != 0 || ARow == 0 && ACol != 0)
+  {
+  T_CFCalc->Cells[ARow][ACol] = Value;
+  T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+  }
+
+  SaveButton->Enabled = true;
+  MF_Save->Enabled = true;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcGetEditText(TObject *Sender, int ACol, int ARow,
+		  UnicodeString &Value)
+{
+//
+SavedCell = Value/*==T_CFCalc->Cells[ACol][ARow]*/; //пригодится при отмене изменений в ячейке
+
+//смещение фокуса ввода с ячеек, которые не надо редактировать
+if(ACol == T_CFCalc->FixedCols && ARow == T_CFCalc->FixedRows) T_CFCalc->Col++;
+else
+  {
+   while((T_CFCalc->Col >= T_CFCalc->ColCount - COLS_WITH_CALC ||
+	   T_CFCalc->Col == ARow) && T_CFCalc->Col > T_CFCalc->FixedCols)
+	   {
+	   T_CFCalc->Col--;
+       T_CFCalc->Cells[ACol][ARow] = Value;
+	   }
+  }
+
+}
+//---------------------------------------------------------------------------
+
+
+void __fastcall TMF_CityRoutes::T_CFCalcDblClick(TObject *Sender)
+{
+T_CFCalc->Invalidate();
+TPoint Curs; //курсор
+GetCursorPos(&Curs); //Curs = Mouse->CursorPos;
+Curs = ((TStringGrid* )Sender)->ScreenToClient(Curs);
+if(GetCursor() == Screen->Cursors[crHSplit])
+{
+//Корректировка Ширины
+  TGridCoord gc/*Координаты таблицы*/
+	= ((TStringGrid* )Sender)->MouseCoord(Curs.X - 4, Curs.Y);
+  int w = CalcGridColWidth((TStringGrid*)Sender, gc.X);
+  if(((TStringGrid*)Sender)->ColWidths[gc.X] != w)
+	  ((TStringGrid*)Sender)->ColWidths[gc.X] = w;
+  else
+	  ((TStringGrid*)Sender)->ColWidths[gc.X] = MIN_COL_WIDTH;
+  return;
+}
+
+ TGridCoord gc/*Координаты таблицы*/
+	= ((TStringGrid* )Sender)->MouseCoord(Curs.X/*индекс столбца*/,
+													 Curs.Y/*индекс строки*/);
+
+ //вход в режим редактирования
+ if(!MFO_EditMode->Checked)
+	if(gc.X < T_CFCalc->ColCount-COLS_WITH_CALC && gc.X != gc.Y )
+	  // if(!T_CFCalc->EditorMode)
+	  {
+	  T_CFCalc->Options = T_CFCalc->Options<<goEditing;//вкл
+	  MFO_EditMode->Checked = true;
+	  }
+
+
+  if(T_CFCalc->FixedCols == 0/*тогда и T_CFCalc->FixedRows == 0*/) return;
+
+   //Сортировка по столбцу
+  if(gc.Y == 0)
+  {
+	if(FSortedRowNbr != 0){
+	int i = abs(FSortedRowNbr) - 1;
+	 ((TStringGrid* )Sender)->Cells[0][i] =//убираем пометку из stroki сортировки
+		 ((TStringGrid* )Sender)->Cells[0][i].SubString(1,
+			((TStringGrid* )Sender)->Cells[0][i].Length() - 2);//2 = пробел+символ
+	T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+	FSortedRowNbr = 0;
+	}
+
+
+
+  int i = abs(FSortedColNbr) - 1;
+
+  if(FSortedColNbr != 0)
+	{
+	 ((TStringGrid* )Sender)->Cells[i][0] = //убираем пометку из столбца сортировки
+		 ((TStringGrid* )Sender)->Cells[i][0].SubString(1,
+			((TStringGrid* )Sender)->Cells[i][0].Length() - 2); // 2 = пробел+символ
+	 if(FSortedColNbr < 0 && abs(FSortedColNbr) == i + 1)
+	  {
+	   FSortedColNbr = 0;
+	  //Автокоррекция ширины столбцов
+	  if(MFO_AutoWidth->Checked)
+				T_CFCalc->ColWidths[i] = CalcGridColWidth((TStringGrid* )Sender, i);
+
+      return;
+	  }
+	}
+
+  if(FSortedColNbr && i==gc.X)// столбец уже был отсортирован
+	 FSortedColNbr = -FSortedColNbr;// меняем напр. сортировки
+  else //сортировки не было или был отсортирован другой столбец
+	 FSortedColNbr = gc.X+1;//т.к. 0 используется для обозначения несорт. столбца
+  i = gc.X;
+
+
+  if(FSortedColNbr < 0) //по убыв
+   ((TStringGrid* )Sender)->Cells[i][0] = ((TStringGrid* )Sender)->Cells[i][0]
+												 + L" ↑" ;
+  else //по возраст.
+   ((TStringGrid* )Sender)->Cells[i][0] = ((TStringGrid* )Sender)->Cells[i][0]
+                                                 + L" ↓";
+
+   //Автокоррекция ширины столбцов
+    if(MFO_AutoWidth->Checked)
+	for(int J = 0; J < ((TStringGrid* )Sender)->ColCount; J++)
+	  {
+	  int ColW = CalcGridColWidth((TStringGrid* )Sender, J);
+	  if(ColW > T_CFCalc->ColWidths[J]) T_CFCalc->ColWidths[J] = ColW;
+	  }
+
+
+  ((TStringGrid*)Sender)->Rows[((TStringGrid* )Sender)->Row]->Objects[0] = (TObject*)true;
+
+  IsSort = true;
+  SortGridByCol((TStringGrid*)Sender, i, FSortedColNbr>0,  gc.X==0/*gc.Y == 0 */);
+  IsSort = false;
+
+  for (i = ((TStringGrid*)Sender)->FixedRows; i < ((TStringGrid*)Sender)->RowCount; i++)
+		 if(((TStringGrid*)Sender)->Rows[i]->Objects[0])
+		 {
+		  ((TStringGrid*)Sender)->Rows[i]->Objects[0] = (TObject*) false;
+		  ((TStringGrid*)Sender)->Row = i;
+		  break;
+		 }
+  return;
+  }
+
+ //Сортировка по строке
+ if(gc.X == 0)
+  {
+	if(FSortedColNbr != 0){
+	int i = abs(FSortedColNbr) - 1;
+	((TStringGrid* )Sender)->Cells[i][0] = //убираем пометку из столбца сортировки
+		 ((TStringGrid* )Sender)->Cells[i][0].SubString(1,
+			((TStringGrid* )Sender)->Cells[i][0].Length() - 2); // 2 = пробел+символ
+	T_CFCalc->ColWidths[i] = CalcGridColWidth(T_CFCalc, i);
+    FSortedColNbr = 0;
+	}
+
+  int i = abs(FSortedRowNbr) - 1;
+
+  if(FSortedRowNbr)
+	{
+	 ((TStringGrid* )Sender)->Cells[0][i] = //убираем пометку из столбца сортировки
+		 ((TStringGrid* )Sender)->Cells[0][i].SubString(1,
+			((TStringGrid* )Sender)->Cells[0][i].Length() - 2); // 2 = пробел+символ
+
+	  if(FSortedRowNbr < 0 && abs(FSortedRowNbr) == i + 1)
+	  {
+	   FSortedRowNbr = 0;
+	   T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+	   return;
+	  }
+	}
+
+
+  if(FSortedRowNbr && i==gc.Y)// столбец уже был отсортирован
+	 FSortedRowNbr = -FSortedRowNbr;// меняем напр. сортировки
+  else //сортировки не было или был отсортирован другой столбец
+	 FSortedRowNbr = gc.Y+1;//т.к. 0 используется для обозначения несорт. столбца
+  i = gc.Y;
+
+
+  if(FSortedRowNbr < 0) //по убыв
+   ((TStringGrid* )Sender)->Cells[0][i] =((TStringGrid* )Sender)->Cells[0][i]
+																		  + L" ←";
+  else //по возраст.
+   ((TStringGrid* )Sender)->Cells[0][i] =
+								 ((TStringGrid* )Sender)->Cells[0][i] + L" →";
+
+   T_CFCalc->ColWidths[0] = CalcGridColWidth((TStringGrid* )Sender, 0);
+
+
+  ((TStringGrid*)Sender)->Rows[((TStringGrid* )Sender)->Row]->Objects[0] = (TObject*)true;
+
+  IsSort = true;
+  SortGridByRow((TStringGrid*)Sender, i, FSortedRowNbr>0);
+  IsSort = false;
+
+  for (i = ((TStringGrid*)Sender)->FixedCols;
+				   i < ((TStringGrid*)Sender)->ColCount - COLS_WITH_CALC; i++)
+		 if(((TStringGrid*)Sender)->Cols[i]->Objects[0])
+		 {
+		  ((TStringGrid*)Sender)->Cols[i]->Objects[0] = (TObject*) false;
+		  ((TStringGrid*)Sender)->Col = i;
+		  break;
+		 }
+
+  }
+}
+//---------------------------------------------------------------------------
+
+
+void __fastcall TMF_CityRoutes::CalcButtonClick(TObject *Sender)
+{
+ if(!RecreateArrays(/*ThisIsSave==*/false))
+ {
+ SB_Inform->SimpleText = L"Не удалось провести вычисления !";
+ return;
+ }
+ for (int i = 1; i < T_CFCalc->RowCount; i++)
+ {
+  float Import = ImportCrg2City(CargoF, i);
+  T_CFCalc->Cells[T_CFCalc->ColCount-COLS_WITH_CALC][i] =
+										  FloatToStr(Import);
+  float Export = ExportCrg2City(CargoF, i);
+  T_CFCalc->Cells[T_CFCalc->ColCount-COLS_WITH_CALC + 1][i] =
+										  FloatToStr(Export);
+  T_CFCalc->Cells[T_CFCalc->ColCount-COLS_WITH_CALC + 2][i] =
+										  FloatToStr(abs(Import - Export));
+  float P = CalcP(CargoF);
+
+  T_CFCalc->Cells[T_CFCalc->ColCount-COLS_WITH_CALC + 3][i] =
+										  ImportCrgFlWeidht(CargoF, i, P);
+  T_CFCalc->Cells[T_CFCalc->ColCount-COLS_WITH_CALC + 4][i] =
+										  ExportCrgFlWeight(CargoF, i, P);
+ }
+
+ for(int J = 0; J < T_CFCalc->ColCount; J++)
+				T_CFCalc->ColWidths[J] = CalcGridColWidth(T_CFCalc, J);
+
+
+ SaveToTxt->Enabled = true;
+ SaveButton->Enabled = true;
+ MF_Save->Enabled = true;
+ CalcButton->Enabled = false;
+
+ //Oчистка массивов
+ NameCity.set_length(0);
+ CargoF.set_length(0);
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcContextPopup(TObject *Sender, TPoint &MousePos,
+          bool &Handled)
+{
+// работает при обычном щелчке на ПКМ
+GetCursorPos(&MousePos); //Curs = Mouse->CursorPos;
+MousePos = ((TStringGrid* )Sender)->ScreenToClient(MousePos);
+
+TGridCoord gc/*Координаты таблицы*/
+	= ((TStringGrid* )Sender)->MouseCoord(MousePos.X/*индекс столбца*/,
+													 MousePos.Y/*индекс строки*/);
+ if((gc.X == 0 || gc.Y == 0) && gc.X != gc.Y)
+ {
+	if(T_CFCalc->FixedCols != 0 && T_CFCalc->FixedRows != 0)
+	{
+	T_CFCalc->FixedCols = 0;
+	T_CFCalc->FixedRows = 0;
+	T_CFCalc->Row = gc.Y;
+	T_CFCalc->Col = gc.X;
+
+    //Вход в режим редактирования
+	T_CFCalc->Options = T_CFCalc->Options<<goEditing;//вкл
+	MFO_EditMode->Checked = true;
+
+    }
+
+	if(FSortedColNbr != 0){
+	int i = abs(FSortedColNbr) - 1;
+	((TStringGrid* )Sender)->Cells[i][0] = //убираем пометку из столбца сортировки
+		 ((TStringGrid* )Sender)->Cells[i][0].SubString(1,
+			((TStringGrid* )Sender)->Cells[i][0].Length() - 2); // 2 = пробел+символ
+	T_CFCalc->ColWidths[i] = CalcGridColWidth(T_CFCalc, i);
+	}
+
+	if(FSortedRowNbr != 0){
+	int i = abs(FSortedRowNbr) - 1;
+	 ((TStringGrid* )Sender)->Cells[0][i] = //убираем пометку из stroki сортировки
+		 ((TStringGrid* )Sender)->Cells[0][i].SubString(1,
+			((TStringGrid* )Sender)->Cells[0][i].Length() - 2); // 2 = пробел+символ
+	T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+	}
+ }
+}
+//---------------------------------------------------------------------------
+void __fastcall TMF_CityRoutes::MF_CreateClick(TObject *Sender)
+{
+ if(SaveButton->Enabled)
+  {
+   switch(Application->MessageBox(
+	 UnicodeString(L"В таблице остались несохраненные изменения!"
+	  + UnicodeString(L"\nСохранить?")).w_str(), L"Внимание!",
+	    MB_YESNOCANCEL|MB_ICONQUESTION))
+	 {
+	 case IDYES:
+	 SaveData(SaveDialog->FileName.IsEmpty());
+	 break;
+
+	 case IDCANCEL:
+     return;
+	 }
+  }
+  for(int i=0; i<T_CFCalc->RowCount; i++)
+						  T_CFCalc->Rows[i]->Clear();
+  CreateEmptyT();
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcRowMoved(TObject *Sender, int FromIndex, int ToIndex)
+
+{
+  if(!IsDelete && !IsSort)ColMove((TStringGrid*)Sender, FromIndex, ToIndex);
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcColumnMoved(TObject *Sender, int FromIndex,
+		  int ToIndex)
+{
+ //Аборт. Тихие искл. - спросить про это, т.к. не нашел инфу по этому вопросу!!
+ //Возврат Столбца для расчета обратно после переноса
+ //(нужно, т.к. эти столбцы переносить низя).
+if(!IsDelete && !IsSort)
+ {
+ if(FromIndex >= T_CFCalc->ColCount - COLS_WITH_CALC || FromIndex == 0
+	  || ToIndex >= T_CFCalc->ColCount - COLS_WITH_CALC)
+			   {
+				ColMove((TStringGrid*)Sender, ToIndex, FromIndex);
+				///данный блок кода нужен, т.к. почему-то ширина посл. не желтого столбца присваивает себе значение
+				// желтого столбца, на место которого мы хотели перенести свой столбец
+
+				//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+				for(int J = 0; J < T_CFCalc->ColCount; J++)
+			      	T_CFCalc->ColWidths[J] = CalcGridColWidth(T_CFCalc, J);
+				int a = T_CFCalc->ColWidths[ToIndex];
+				T_CFCalc->ColWidths[ToIndex] = T_CFCalc->ColWidths[T_CFCalc->ColCount - COLS_WITH_CALC - 1];
+				T_CFCalc->ColWidths[T_CFCalc->ColCount - COLS_WITH_CALC - 1] = a;
+				//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+				T_CFCalc->Col = FromIndex;
+				return;
+			   }
+  RowMove((TStringGrid*)Sender, FromIndex, ToIndex);
+ }
+}
+//---------------------------------------------------------------------------
+
+
+void __fastcall TMF_CityRoutes::FormCloseQuery(TObject *Sender, bool &CanClose)
+{
+   if(SaveButton->Enabled)
+  {
+   switch(Application->MessageBox(UnicodeString(L"В таблице остались несохраненные изменения!"
+	+ UnicodeString(L"\nСохранить?")).w_str(), L"Внимание!",
+	 MB_YESNOCANCEL|MB_ICONQUESTION))
+	 {
+	 case IDYES:
+	 SaveData(SaveDialog->FileName.IsEmpty());
+	 break;
+
+	 case IDCANCEL:
+	 CanClose = false;
+     return;
+	 }
+  }
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMF_CityRoutes::T_CFCalcSelectCell(TObject *Sender,
+                                           int ACol, int ARow, bool &CanSelect)
+{
+  if(T_CFCalc->FixedRows == 0//тогда и T_CFCalc->FixedCols == 0
+	 && ACol !=0 && ARow !=0)
+	 {
+		T_CFCalc->FixedRows++;
+		T_CFCalc->FixedCols++;
+
+		//возврат стрелочки
+		if(FSortedColNbr > 0)
+		 {
+		int i = abs(FSortedColNbr) - 1;
+			((TStringGrid* )Sender)->Cells[i][0]
+						= ((TStringGrid* )Sender)->Cells[i][0] + L" ↓";
+		T_CFCalc->ColWidths[i] = CalcGridColWidth(T_CFCalc, i);
+		}
+
+		if(FSortedColNbr < 0)
+		{
+		int i = abs(FSortedColNbr) - 1;
+		((TStringGrid* )Sender)->Cells[i][0]
+			= ((TStringGrid* )Sender)->Cells[i][0] + L" ↑";
+		T_CFCalc->ColWidths[i] = CalcGridColWidth(T_CFCalc, i);
+		}
+
+		if(FSortedRowNbr > 0)
+		{
+		int i = abs(FSortedRowNbr) - 1;
+		((TStringGrid* )Sender)->Cells[0][i]
+					= ((TStringGrid* )Sender)->Cells[0][i] + L" →";
+		T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+		}
+
+		if(FSortedRowNbr < 0)
+		{
+		int i = abs(FSortedRowNbr) - 1;
+		((TStringGrid* )Sender)->Cells[0][i]
+				= ((TStringGrid* )Sender)->Cells[0][i] + L" ←";
+		T_CFCalc->ColWidths[0] = CalcGridColWidth(T_CFCalc, 0);
+		}
+	 }
+}
+//---------------------------------------------------------------------------
+
+
+
+void __fastcall TMF_CityRoutes::SaveToTxtClick(TObject *Sender)
+{
+ ofstream File;
+ //////////////////////////////////////////////////////////////////////////
+
+}
+//---------------------------------------------------------------------------
+
